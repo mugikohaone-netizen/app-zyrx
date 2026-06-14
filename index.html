@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>やさい屋さんメニューづくり</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Yomogi&family=Zen+Maru+Gothic:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:       #FBF3E3;
+  --card:     #FFFDF7;
+  --green:    #4F7942;
+  --green-dk: #3A5A30;
+  --accent:   #E8633C;
+  --mustard:  #F0A93B;
+  --text:     #4A3F35;
+  --line:     #E4D7C2;
+  --gray:     #D9CFC1;
+  --font-pop:  'Yomogi', cursive;
+  --font-main: 'Zen Maru Gothic', sans-serif;
+}
+body { background:var(--bg); color:var(--text); font-family:var(--font-main); min-height:100vh; padding-bottom:60px; }
+
+/* header */
+header { background:var(--green); color:#fff; border-radius:0 0 24px 24px; padding:28px 20px 22px; box-shadow:0 2px 8px rgba(0,0,0,.15); }
+.header-row { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+.header-icon { font-size:1.5rem; }
+.header-title { font-family:var(--font-pop); font-size:1.3rem; font-weight:900; letter-spacing:.05em; }
+.header-desc { font-size:.78rem; opacity:.9; line-height:1.6; }
+
+/* main */
+main { max-width:480px; margin:0 auto; padding:16px 14px; display:flex; flex-direction:column; gap:14px; }
+
+/* card */
+.card { background:var(--card); border:1.5px solid var(--line); border-radius:20px; padding:16px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+.section-title { font-family:var(--font-pop); font-size:1.1rem; font-weight:900; color:var(--green-dk); margin-bottom:12px; }
+
+/* form */
+.field-label { font-size:.72rem; font-weight:700; opacity:.65; display:block; margin-bottom:4px; }
+.field-row { display:flex; gap:10px; align-items:flex-end; }
+.field-row .field { flex:1; }
+.form-gap { margin-top:10px; }
+input[type="text"], input[type="number"] {
+  width:100%; border:2px solid var(--line); border-radius:12px;
+  padding:8px 11px; font-size:.9rem; font-family:var(--font-main);
+  color:var(--text); background:#fff; outline:none; transition:border-color .15s;
+}
+input:focus { border-color:var(--green); }
+.sell-preview { width:100%; border:2px solid var(--line); border-radius:12px; padding:8px 11px; font-size:.9rem; font-weight:700; background:var(--bg); color:var(--text); }
+.btn-add {
+  width:100%; display:flex; align-items:center; justify-content:center; gap:6px;
+  background:var(--accent); color:#fff; font-family:var(--font-main); font-size:.95rem;
+  font-weight:700; border:none; border-radius:14px; padding:11px; cursor:pointer;
+  transition:opacity .15s; margin-top:10px;
+}
+.btn-add:disabled { background:var(--gray); cursor:default; }
+.btn-add:not(:disabled):hover { opacity:.85; }
+
+/* list */
+.empty-state { border:2px dashed var(--line); border-radius:20px; text-align:center; padding:28px 16px; font-size:.85rem; opacity:.55; line-height:1.8; }
+.item-card { background:var(--card); border:2px solid var(--line); border-radius:20px; padding:12px; box-shadow:0 1px 4px rgba(0,0,0,.06); position:relative; margin-bottom:10px; }
+.item-card.featured { border-color:var(--mustard); }
+.featured-badge { position:absolute; top:-12px; left:12px; background:var(--mustard); color:#fff; font-family:var(--font-pop); font-size:.7rem; font-weight:700; padding:2px 10px; border-radius:20px; box-shadow:0 1px 3px rgba(0,0,0,.15); }
+.item-name-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.item-name-input { flex:1; border:none; border-bottom:2px solid transparent; background:transparent; font-family:var(--font-pop); font-size:1.05rem; font-weight:900; color:var(--text); outline:none; padding:2px 0; }
+.item-name-input:focus { border-bottom-color:var(--text); }
+.btn-icon { width:34px; height:34px; border:none; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:var(--bg); font-size:1rem; transition:opacity .15s; }
+.btn-icon:hover { opacity:.75; }
+.btn-star.active { background:var(--mustard); }
+.price-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+.price-row .field { flex:1; }
+.price-row .field label { font-size:.68rem; }
+.price-input-wrap { display:flex; align-items:center; gap:4px; }
+.price-input-wrap input { flex:1; }
+.yen { font-size:.8rem; opacity:.65; white-space:nowrap; }
+.yen-accent { font-size:.8rem; color:var(--accent); white-space:nowrap; }
+.sell-input { border-color:var(--accent) !important; color:var(--accent) !important; font-weight:700 !important; }
+.sell-label { color:var(--accent); }
+.btn-recalc { margin-top:14px; background:var(--bg); flex-shrink:0; }
+.two-col { display:flex; gap:8px; margin-bottom:8px; }
+.two-col .field { flex:1; }
+
+/* prompt */
+.prompt-title-row { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:4px; }
+.prompt-title { font-family:var(--font-pop); font-size:.95rem; font-weight:900; color:var(--green-dk); }
+.prompt-desc { font-size:.72rem; opacity:.6; margin-bottom:6px; line-height:1.5; }
+.btn-copy { flex-shrink:0; display:flex; align-items:center; gap:4px; background:var(--accent); color:#fff; font-family:var(--font-main); font-size:.72rem; font-weight:700; border:none; border-radius:20px; padding:6px 12px; cursor:pointer; transition:background .2s; }
+.btn-copy.copied { background:var(--green); }
+.prompt-textarea { width:100%; border:1.5px solid var(--line); border-radius:14px; padding:10px; font-size:.72rem; font-family:var(--font-main); line-height:1.7; background:var(--bg); color:var(--text); resize:none; outline:none; }
+.note-small { font-size:.72rem; opacity:.55; text-align:center; padding:0 8px; }
+svg { display:inline-block; vertical-align:middle; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-row">
+    <span class="header-icon">&#127807;</span>
+    <span class="header-title">やさい屋さんメニューづくり</span>
+  </div>
+  <p class="header-desc">仕入れ値を入れると2割増しの売値を自動計算。<br>看板&amp;値札用の画像生成プロンプトもまとめて作れます。</p>
+</header>
+
+<main>
+  <div class="card">
+    <div class="section-title">野菜を追加</div>
+    <div>
+      <label class="field-label">野菜名</label>
+      <input type="text" id="inp-name" placeholder="例：トマト" autocomplete="off">
+    </div>
+    <div class="field-row form-gap">
+      <div class="field">
+        <label class="field-label">仕入れ値（円）</label>
+        <input type="number" id="inp-cost" placeholder="例：100" min="0" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label class="field-label">売値（2割増し）</label>
+        <div class="sell-preview" id="preview-sell">—</div>
+      </div>
+    </div>
+    <button class="btn-add" id="btn-add" disabled>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      追加する
+    </button>
+  </div>
+
+  <div id="item-list"></div>
+
+  <div id="prompt-section" style="display:none;flex-direction:column;gap:12px;">
+    <div class="section-title">画像生成用プロンプト</div>
+    <div class="card">
+      <div class="prompt-title-row">
+        <div class="prompt-title">&#9312; A4横向き メニュー看板用プロンプト</div>
+        <button class="btn-copy" id="btn-copy-sign" onclick="copyPrompt('sign')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          コピー
+        </button>
+      </div>
+      <div class="prompt-desc">A4横向きの看板イラスト用です。本日のおすすめは専用の1枚に大きく掲載し、他の野菜は5品ごとに次のシートに分かれます。</div>
+      <textarea class="prompt-textarea" id="prompt-sign" rows="10" readonly></textarea>
+    </div>
+    <div class="card">
+      <div class="prompt-title-row">
+        <div class="prompt-title">&#9313; 切って使える値札シート用プロンプト</div>
+        <button class="btn-copy" id="btn-copy-tags" onclick="copyPrompt('tags')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          コピー
+        </button>
+      </div>
+      <div class="prompt-desc">A4縦向き・名刺サイズの値札を10枚1シートにまとめた画像用です。多い場合は2枚目・3枚目に自動で分かれます。</div>
+      <textarea class="prompt-textarea" id="prompt-tags" rows="10" readonly></textarea>
+    </div>
+    <p class="note-small">生成した文章を画像生成AI（例：Gemini、ChatGPT、Midjourneyなど）に貼り付けてご利用ください。</p>
+  </div>
+</main>
+
+<script>
+const STORAGE_KEY = 'veggie-stand-items-v1';
+const CARDS_PER_SHEET = 10;
+const MENU_ITEMS_PER_SHEET = 5;
+let items = [];
+
+const calcSellPrice = c => { const n=Number(c); if(!n||n<=0)return 0; return Math.ceil(n*1.2/10)*10; };
+const formatYen = n => Number(n||0).toLocaleString('ja-JP')+'円';
+const priceLabel = (sell,unit) => { const y=formatYen(sell); return unit&&unit.trim()?unit.trim()+' '+y:y; };
+const formatItemLine = it => {
+  const o=it.origin&&it.origin.trim()?'（'+it.origin.trim()+'産）':'';
+  const n=it.note&&it.note.trim()?'（'+it.note.trim()+'）':'';
+  return '・'+it.name+o+'：'+priceLabel(it.sell,it.unit)+n;
+};
+const chunk = (arr,size) => { const o=[]; for(let i=0;i<arr.length;i+=size)o.push(arr.slice(i,i+size)); return o; };
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+const save = () => { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(items));}catch(e){} };
+const load = () => { try{ const r=localStorage.getItem(STORAGE_KEY); if(r){const p=JSON.parse(r);if(Array.isArray(p))items=p;} }catch(e){} };
+
+const buildSignboardPrompt = () => {
+  if(!items.length)return '';
+  const fi=items.filter(it=>it.featured), oi=items.filter(it=>!it.featured);
+  const sheets=[];
+  chunk(fi,MENU_ITEMS_PER_SHEET).forEach(g=>sheets.push({kind:'featured',items:g}));
+  chunk(oi,MENU_ITEMS_PER_SHEET).forEach(g=>sheets.push({kind:'normal',items:g}));
+  const secs=sheets.map((sheet,idx)=>{
+    const lines=sheet.items.map(formatItemLine).join('\n');
+    if(sheet.kind==='featured'){
+      const names=sheet.items.map(f=>f.name).join('、');
+      return '【'+(idx+1)+'枚目／A4横向き：本日のおすすめボード】\nこのシートは「本日のおすすめ」専用のページです。「'+names+'」を画面いっぱいに使って一番大きく描き、星マークや「本日の目玉!」「いらっしゃい!」のような手描きの吹き出し・リボン装飾を加えて、他のどのシートよりも目立つ特別なデザインにしてください。\n'+lines;
+    }
+    return '【'+(idx+1)+'枚目／A4横向き：メニュー表】\n以下の野菜と価格を、手描き風のチョークやマーカーで書いたメニュー表として並べてください。\n'+lines;
+  }).join('\n\n');
+  const note=sheets.length>1
+    ? '\n用紙はA4サイズ・横向き（ランドスケープ）で、合計'+sheets.length+'枚に分けて、それぞれ別の画像として作成してください。リストに記載のない野菜は描かないでください。\n'
+    : '\n用紙はA4サイズ・横向き（ランドスケープ）で1枚作成してください。リストに記載のない野菜は描かないでください。\n';
+  return '手描き風でポップな、八百屋の路上販売スタンドに飾るメニュー看板のイラストを作ってください。\n\n木製の黒板またはクラフト紙風の板をベースに、カラフルなチョークやマーカーで野菜の名前と価格を手書き風の文字で大きく書いてください。\n'+note+'\n'+secs+'\n\n各野菜には、シンプルで可愛い手描き風のイラストを添えてください。\n産地が指定されている野菜は、「〇〇産」のように小さめの手書き文字で添えてください。\nアピールポイントのひとことが書かれている野菜は、その言葉を短いキャッチコピーとして手書き風の文字で添えてください。\n全体的に温かみがあり、道端の八百屋・産直スタンドらしい親しみやすいポップな雰囲気でデザインしてください。\n文字は離れた場所からでも読みやすい太さ・大きさにしてください。';
+};
+
+const buildPriceTagPrompt = () => {
+  if(!items.length)return '';
+  const sheets=chunk(items,CARDS_PER_SHEET);
+  const secs=sheets.map((si,idx)=>{
+    const lines=si.map(it=>{
+      const o=it.origin&&it.origin.trim()?'　産地:'+it.origin.trim():'';
+      const n=it.note&&it.note.trim()?'　ひとこと:「'+it.note.trim()+'」':'';
+      const f=it.featured?'　★本日の目玉★':'';
+      return '・'+it.name+'：'+priceLabel(it.sell,it.unit)+o+n+f;
+    }).join('\n');
+    return '【'+(idx+1)+'枚目のA4シート】\n'+lines;
+  }).join('\n\n');
+  const note=sheets.length>1?'\n野菜の種類が多いため、A4シートを'+sheets.length+'枚に分けて、それぞれ別の画像として作成してください。各シートに割り当てる野菜は以下の通りです。\n':'\n';
+  return '手描き風・ポップなデザインの「野菜の値札シート」を、A4サイズ（縦向き）の用紙レイアウトで作成してください。\n\n値札カードは1枚あたり横90mm×縦55mm程度（名刺サイズくらい）を想定し、A4用紙1枚につき2列×5行＝合計10枚のカードを並べてください。\n各カードの周囲には切り取り線（点線）を入れ、ハサミで1枚ずつ切り分けて商品の前に立てて飾れるようにしてください。\n各カードには、野菜の名前・価格・（あれば）産地・アピールポイントのひとことを大きく手書き風フォントで記載し、該当する野菜のシンプルで可愛い手描き風イラストも添えてください。\n産地は「〇〇産」のように、価格よりも小さめの文字で記載してください。\n'+note+'\n'+secs+'\n\n「本日の目玉」と指定したカードは、星マーク・色付きの太い枠線・「本日のおすすめ!」のような手描きのリボンや吹き出しなど、他のカードよりも目立つ特別な装飾を加えてください。\n配色はカラフルで親しみやすいポップな雰囲気に統一してください。';
+};
+
+const renderItems = () => {
+  const list=document.getElementById('item-list');
+  if(!items.length){
+    list.innerHTML='<div class="empty-state">まだ野菜が登録されていません。<br>上のフォームから追加してみましょう。</div>';
+    document.getElementById('prompt-section').style.display='none';
+    return;
+  }
+  list.innerHTML=items.map(it=>`
+    <div class="item-card ${it.featured?'featured':''}" id="item-${it.id}">
+      ${it.featured?'<div class="featured-badge">&#9733;本日の目玉</div>':''}
+      <div class="item-name-row" ${it.featured?'style="margin-top:8px"':''}>
+        <input class="item-name-input" type="text" value="${esc(it.name)}"
+          onchange="updateField('${it.id}','name',this.value)" placeholder="野菜名">
+        <button class="btn-icon btn-star${it.featured?' active':''}"
+          title="本日の目玉に設定" onclick="toggleFeatured('${it.id}')">&#11088;</button>
+        <button class="btn-icon" title="削除" onclick="removeItem('${it.id}')">&#128465;&#65039;</button>
+      </div>
+      <div class="price-row">
+        <div class="field">
+          <label class="field-label">仕入れ値</label>
+          <div class="price-input-wrap">
+            <input type="number" min="0" inputmode="numeric" value="${esc(it.cost)}"
+              onchange="updateField('${it.id}','cost',this.value===''?'':Number(this.value))">
+            <span class="yen">円</span>
+          </div>
+        </div>
+        <button class="btn-icon btn-recalc" title="2割増しで再計算" onclick="recalc('${it.id}')">&#128260;</button>
+        <div class="field">
+          <label class="field-label sell-label" id="slabel-${it.id}">売値（修正可）${it.unit&&it.unit.trim()?'／'+esc(it.unit.trim())+'あたり':''}</label>
+          <div class="price-input-wrap">
+            <input type="number" min="0" inputmode="numeric" value="${esc(it.sell)}"
+              class="sell-input"
+              onchange="updateField('${it.id}','sell',this.value===''?'':Number(this.value))">
+            <span class="yen-accent">円</span>
+          </div>
+        </div>
+      </div>
+      <div class="two-col">
+        <div class="field">
+          <label class="field-label">産地</label>
+          <input type="text" value="${esc(it.origin||'')}" placeholder="例：地元産"
+            onchange="updateField('${it.id}','origin',this.value)">
+        </div>
+        <div class="field">
+          <label class="field-label">数量・単位</label>
+          <input type="text" value="${esc(it.unit||'')}" placeholder="例：3個、100g"
+            onchange="updateField('${it.id}','unit',this.value)"
+            oninput="refreshUnitLabel('${it.id}',this.value)">
+        </div>
+      </div>
+      <div>
+        <label class="field-label">ひとこと（アピールポイント）</label>
+        <input type="text" value="${esc(it.note||'')}" placeholder="例：甘くてジューシー！朝採れたて"
+          onchange="updateField('${it.id}','note',this.value)">
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('prompt-sign').value=buildSignboardPrompt();
+  document.getElementById('prompt-tags').value=buildPriceTagPrompt();
+  document.getElementById('prompt-section').style.display='flex';
+};
+
+const addItem = () => {
+  const ne=document.getElementById('inp-name'), ce=document.getElementById('inp-cost');
+  const name=ne.value.trim(); if(!name)return;
+  const cost=Number(ce.value)||0;
+  items.push({id:uid(),name,cost,sell:calcSellPrice(cost),featured:false,note:'',origin:'',unit:''});
+  ne.value=''; ce.value='';
+  document.getElementById('preview-sell').textContent='—';
+  document.getElementById('btn-add').disabled=true;
+  save(); renderItems();
+};
+const updateField = (id,key,val) => {
+  const it=items.find(i=>i.id===id); if(!it)return;
+  it[key]=val; save();
+  document.getElementById('prompt-sign').value=buildSignboardPrompt();
+  document.getElementById('prompt-tags').value=buildPriceTagPrompt();
+};
+const refreshUnitLabel = (id,val) => {
+  const el=document.getElementById('slabel-'+id);
+  if(el)el.textContent='売値（修正可）'+(val.trim()?'／'+val.trim()+'あたり':'');
+};
+const recalc = id => {
+  const it=items.find(i=>i.id===id); if(!it)return;
+  it.sell=calcSellPrice(it.cost); save(); renderItems();
+};
+const toggleFeatured = id => {
+  const it=items.find(i=>i.id===id); if(!it)return;
+  it.featured=!it.featured; save(); renderItems();
+};
+const removeItem = id => { items=items.filter(i=>i.id!==id); save(); renderItems(); };
+const copyPrompt = key => {
+  const ta=document.getElementById('prompt-'+key);
+  const btn=document.getElementById('btn-copy-'+key);
+  if(!ta.value)return;
+  const done=()=>{
+    btn.classList.add('copied');
+    btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> コピー済み';
+    setTimeout(()=>{
+      btn.classList.remove('copied');
+      btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> コピー';
+    },1800);
+  };
+  if(navigator.clipboard){navigator.clipboard.writeText(ta.value).then(done).catch(()=>{ta.select();document.execCommand('copy');done();});}
+  else{ta.select();document.execCommand('copy');done();}
+};
+
+document.getElementById('inp-name').addEventListener('input',function(){document.getElementById('btn-add').disabled=!this.value.trim();});
+document.getElementById('inp-cost').addEventListener('input',function(){const v=calcSellPrice(this.value);document.getElementById('preview-sell').textContent=v?formatYen(v):'—';});
+document.getElementById('inp-name').addEventListener('keydown',e=>{if(e.key==='Enter')addItem();});
+document.getElementById('btn-add').addEventListener('click',addItem);
+
+load(); renderItems();
+</script>
+</body>
+</html>
