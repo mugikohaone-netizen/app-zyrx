@@ -138,7 +138,7 @@ svg { display:inline-block; vertical-align:middle; }
           コピー
         </button>
       </div>
-      <div class="prompt-desc">A4横向きの看板イラスト用です。本日のおすすめは専用の1枚に大きく掲載し、他の野菜は5品ごとに次のシートに分かれます。</div>
+      <div class="prompt-desc">A4横向きの看板イラスト用です。1枚に野菜4品まで（2×2マス）。5品目以降が必要な場合は、画像生成AIに次のメッセージを送ってください：「次のメニュー表をお願いします。1枚目と同じ2×2の4マスレイアウトで、画面全体を使わず、各野菜を1マスずつに収めてください」</div>
       <textarea class="prompt-textarea" id="prompt-sign" rows="10" readonly></textarea>
     </div>
     <div class="card">
@@ -152,6 +152,17 @@ svg { display:inline-block; vertical-align:middle; }
       <div class="prompt-desc">A4縦向き・名刺サイズの値札を10枚1シートにまとめた画像用です。多い場合は2枚目・3枚目に自動で分かれます。</div>
       <textarea class="prompt-textarea" id="prompt-tags" rows="10" readonly></textarea>
     </div>
+    <div class="card">
+      <div class="prompt-title-row">
+        <div class="prompt-title">&#9314; A3縦 おしゃれ手書き風メニュー表用プロンプト</div>
+        <button class="btn-copy" id="btn-copy-art" onclick="copyPrompt('art')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          コピー
+        </button>
+      </div>
+      <div class="prompt-desc">A3縦向き1枚に野菜を全部まとめる、おしゃれな手書き風メニュー表用です。グリッドに縛られず自由なレイアウトを重視します。</div>
+      <textarea class="prompt-textarea" id="prompt-art" rows="10" readonly></textarea>
+    </div>
     <p class="note-small">生成した文章を画像生成AI（例：Gemini、ChatGPT、Midjourneyなど）に貼り付けてご利用ください。</p>
   </div>
 </main>
@@ -159,7 +170,7 @@ svg { display:inline-block; vertical-align:middle; }
 <script>
 const STORAGE_KEY = 'veggie-stand-items-v1';
 const CARDS_PER_SHEET = 10;
-const MENU_ITEMS_PER_SHEET = 5;
+const MENU_ITEMS_PER_SHEET = 4;
 let items = [];
 
 const calcSellPrice = c => { const n=Number(c); if(!n||n<=0)return 0; return Math.ceil(n*1.2/10)*10; };
@@ -179,22 +190,21 @@ const load = () => { try{ const r=localStorage.getItem(STORAGE_KEY); if(r){const
 
 const buildSignboardPrompt = () => {
   if(!items.length)return '';
-  const fi=items.filter(it=>it.featured), oi=items.filter(it=>!it.featured);
-  const sheets=[];
-  chunk(fi,MENU_ITEMS_PER_SHEET).forEach(g=>sheets.push({kind:'featured',items:g}));
-  chunk(oi,MENU_ITEMS_PER_SHEET).forEach(g=>sheets.push({kind:'normal',items:g}));
-  const secs=sheets.map((sheet,idx)=>{
-    const lines=sheet.items.map(formatItemLine).join('\n');
-    if(sheet.kind==='featured'){
-      const names=sheet.items.map(f=>f.name).join('、');
-      return '【'+(idx+1)+'枚目／A4横向き：本日のおすすめボード】\nこのシートは「本日のおすすめ」専用のページです。「'+names+'」を画面いっぱいに使って一番大きく描き、星マークや「本日の目玉!」「いらっしゃい!」のような手描きの吹き出し・リボン装飾を加えて、他のどのシートよりも目立つ特別なデザインにしてください。\n'+lines;
-    }
-    return '【'+(idx+1)+'枚目／A4横向き：メニュー表】\n以下の野菜と価格を、手描き風のチョークやマーカーで書いたメニュー表として並べてください。\n'+lines;
+  const sheets=chunk(items,MENU_ITEMS_PER_SHEET);
+  const layoutRule = '用紙はA4サイズ・横向き（ランドスケープ）で、画面全体を均等な2×2の4マスに分割してください。野菜が4品に満たない場合でも、各野菜は1マスの中だけに収め、マスの大きさ自体は4品揃っている時と同じサイズのままにしてください。余ったマスは何も描かず空白にしてください。1つの野菜を複数マスや画面全体に大きく広げないでください。リストに記載のない野菜は描かないでください。';
+  const secs=sheets.map((sheetItems,idx)=>{
+    const lines=sheetItems.map(it=>{
+      const o=it.origin&&it.origin.trim()?'（'+it.origin.trim()+'産）':'';
+      const n=it.note&&it.note.trim()?'（'+it.note.trim()+'）':'';
+      const f=it.featured?'　★本日の目玉★':'';
+      return '・'+it.name+o+'：'+priceLabel(it.sell,it.unit)+n+f;
+    }).join('\n');
+    return '【'+(idx+1)+'枚目／A4横向き：2×2の4マスメニュー表】\n'+layoutRule+'\n\n掲載する野菜（'+sheetItems.length+'品、残りのマスは空白）：\n'+lines;
   }).join('\n\n');
-  const note=sheets.length>1
-    ? '\n用紙はA4サイズ・横向き（ランドスケープ）で、合計'+sheets.length+'枚に分けて、それぞれ別の画像として作成してください。リストに記載のない野菜は描かないでください。\n'
-    : '\n用紙はA4サイズ・横向き（ランドスケープ）で1枚作成してください。リストに記載のない野菜は描かないでください。\n';
-  return '手描き風でポップな、八百屋の路上販売スタンドに飾るメニュー看板のイラストを作ってください。\n\n木製の黒板またはクラフト紙風の板をベースに、カラフルなチョークやマーカーで野菜の名前と価格を手書き風の文字で大きく書いてください。\n'+note+'\n'+secs+'\n\n各野菜には、シンプルで可愛い手描き風のイラストを添えてください。\n産地が指定されている野菜は、「〇〇産」のように小さめの手書き文字で添えてください。\nアピールポイントのひとことが書かれている野菜は、その言葉を短いキャッチコピーとして手書き風の文字で添えてください。\n全体的に温かみがあり、道端の八百屋・産直スタンドらしい親しみやすいポップな雰囲気でデザインしてください。\n文字は離れた場所からでも読みやすい太さ・大きさにしてください。';
+  const multiNote = sheets.length>1
+    ? '\n野菜の数が多いため、合計'+sheets.length+'枚のシートに分かれます。今回はまず1枚目だけ作成してください。\n2枚目以降が欲しいときは、私から「次のメニュー表をお願いします。1枚目と同じ2×2の4マスレイアウトで、画面全体を使わず、各野菜を1マスずつに収めてください」と伝えますので、その指示に従って次の野菜で同じレイアウトの1枚を作成してください。\n'
+    : '';
+  return '手描き風でポップな、八百屋の路上販売スタンドに飾るメニュー看板のイラストを作ってください。\n\n木製の黒板またはクラフト紙風の板をベースに、カラフルなチョークやマーカーで野菜の名前と価格を手書き風の文字で大きく書いてください。\n'+multiNote+'\n'+secs+'\n\n各野菜には、シンプルで可愛い手描き風のイラストを添えてください。\n産地が指定されている野菜は、「〇〇産」のように小さめの手書き文字で添えてください。\nアピールポイントのひとことが書かれている野菜は、その言葉を短いキャッチコピーとして手書き風の文字で添えてください。\n「★本日の目玉★」と指定された野菜は、星マークや「本日のおすすめ!」のような手描きの吹き出し・太めの枠線で他の野菜より少し目立つように装飾してください（マスの大きさは変えず、装飾だけで目立たせてください）。\n全体的に温かみがあり、道端の八百屋・産直スタンドらしい親しみやすいポップな雰囲気でデザインしてください。\n文字は離れた場所からでも読みやすい太さ・大きさにしてください。';
 };
 
 const buildPriceTagPrompt = () => {
@@ -211,6 +221,17 @@ const buildPriceTagPrompt = () => {
   }).join('\n\n');
   const note=sheets.length>1?'\n野菜の種類が多いため、A4シートを'+sheets.length+'枚に分けて、それぞれ別の画像として作成してください。各シートに割り当てる野菜は以下の通りです。\n':'\n';
   return '手描き風・ポップなデザインの「野菜の値札シート」を、A4サイズ（縦向き）の用紙レイアウトで作成してください。\n\n値札カードは1枚あたり横90mm×縦55mm程度（名刺サイズくらい）を想定し、A4用紙1枚につき2列×5行＝合計10枚のカードを並べてください。\n各カードの周囲には切り取り線（点線）を入れ、ハサミで1枚ずつ切り分けて商品の前に立てて飾れるようにしてください。\n各カードには、野菜の名前・価格・（あれば）産地・アピールポイントのひとことを大きく手書き風フォントで記載し、該当する野菜のシンプルで可愛い手描き風イラストも添えてください。\n産地は「〇〇産」のように、価格よりも小さめの文字で記載してください。\n'+note+'\n'+secs+'\n\n「本日の目玉」と指定したカードは、星マーク・色付きの太い枠線・「本日のおすすめ!」のような手描きのリボンや吹き出しなど、他のカードよりも目立つ特別な装飾を加えてください。\n配色はカラフルで親しみやすいポップな雰囲気に統一してください。';
+};
+
+const buildArtMenuPrompt = () => {
+  if(!items.length)return '';
+  const lines=items.map(it=>{
+    const o=it.origin&&it.origin.trim()?'（'+it.origin.trim()+'産）':'';
+    const n=it.note&&it.note.trim()?'（'+it.note.trim()+'）':'';
+    const f=it.featured?'　★本日の目玉★':'';
+    return '・'+it.name+o+'：'+priceLabel(it.sell,it.unit)+n+f;
+  }).join('\n');
+  return 'おしゃれな手書き風のイラストメニュー表を、A3サイズ・縦向き（ポートレート）の1枚にまとめて作ってください。\n\nレイアウトは、グリッドやマス目で均等に区切る構成ではなく、デザイナーが手描きで仕上げたような自由で動きのある配置にしてください。野菜のイラストや文字の大きさ・向き・余白を意図的に変化させ、視線が自然に流れるような、おしゃれで雑誌の特集ページのような仕上がりを目指してください。\n\n紙の素材はクラフト紙、麻紙、または優しい色合いの水彩風の背景など、温かみがありつつ洗練された雰囲気のものにしてください。文字は手書き風のカリグラフィーやレタリングを使い、野菜ごとに大きさを変えても構いません。\n\n掲載する野菜と価格は以下の通りです（すべてこの1枚にまとめて記載してください。野菜の数が多くても、文字やイラストのサイズを調整して必ず全て収めてください）：\n'+lines+'\n\n各野菜には、繊細で味のある手描きイラストを添えてください。産地が指定されている野菜は「〇〇産」と小さく添え、アピールポイントのひとことがある野菜は、洗練された手書きの一言コピーとして添えてください。\n「★本日の目玉★」と指定された野菜は、他より少し大きく描いたり、囲み線やリボン、控えめな装飾を加えることで自然に目を引くようにしてください（派手すぎないよう、全体のおしゃれな雰囲気を保ってください）。\n\n全体として、道端の八百屋というよりは、センスの良いファーマーズマーケットやおしゃれなカフェに飾ってあるようなメニューボードの雰囲気を目指してください。';
 };
 
 const renderItems = () => {
@@ -272,6 +293,7 @@ const renderItems = () => {
   `).join('');
   document.getElementById('prompt-sign').value=buildSignboardPrompt();
   document.getElementById('prompt-tags').value=buildPriceTagPrompt();
+  document.getElementById('prompt-art').value=buildArtMenuPrompt();
   document.getElementById('prompt-section').style.display='flex';
 };
 
@@ -290,6 +312,7 @@ const updateField = (id,key,val) => {
   it[key]=val; save();
   document.getElementById('prompt-sign').value=buildSignboardPrompt();
   document.getElementById('prompt-tags').value=buildPriceTagPrompt();
+  document.getElementById('prompt-art').value=buildArtMenuPrompt();
 };
 const refreshUnitLabel = (id,val) => {
   const el=document.getElementById('slabel-'+id);
@@ -326,6 +349,16 @@ document.getElementById('inp-name').addEventListener('keydown',e=>{if(e.key==='E
 document.getElementById('btn-add').addEventListener('click',addItem);
 
 load(); renderItems();
+</script>
+
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(regs=>{
+    regs.forEach(r=>r.unregister());
+  }).then(()=>{
+    navigator.serviceWorker.register('./sw.js');
+  });
+}
 </script>
 </body>
 </html>
