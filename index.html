@@ -90,6 +90,9 @@ input:focus { border-color:var(--green); }
 .btn-copy.copied { background:var(--green); }
 .prompt-textarea { width:100%; border:1.5px solid var(--line); border-radius:14px; padding:10px; font-size:.72rem; font-family:var(--font-main); line-height:1.7; background:var(--bg); color:var(--text); resize:none; outline:none; }
 .note-small { font-size:.72rem; opacity:.55; text-align:center; padding:0 8px; }
+.logo-choice-block { margin:10px 0; padding:10px 12px; background:var(--bg); border-radius:14px; }
+.logo-radio-row { display:flex; align-items:center; gap:6px; font-size:.82rem; padding:4px 0; cursor:pointer; }
+.logo-radio-row input { accent-color: var(--green); width:16px; height:16px; flex-shrink:0; }
 svg { display:inline-block; vertical-align:middle; }
 </style>
 </head>
@@ -161,6 +164,23 @@ svg { display:inline-block; vertical-align:middle; }
         </button>
       </div>
       <div class="prompt-desc">A3縦向き1枚に野菜を全部まとめる、おしゃれな手書き風メニュー表用です。グリッドに縛られず自由なレイアウトを重視します。</div>
+
+      <div class="logo-choice-block">
+        <label class="field-label" style="margin-bottom:6px;">屋号ロゴの掲載</label>
+        <label class="logo-radio-row">
+          <input type="radio" name="logo-choice" value="none" checked onchange="onLogoChoiceChange()">
+          <span>ロゴを入れない</span>
+        </label>
+        <label class="logo-radio-row">
+          <input type="radio" name="logo-choice" value="logo1" onchange="onLogoChoiceChange()">
+          <span>ロゴ①（軽トラ・HIJET JUMBO）を入れる</span>
+        </label>
+        <label class="logo-radio-row">
+          <input type="radio" name="logo-choice" value="logo2" onchange="onLogoChoiceChange()">
+          <span>ロゴ②（ジムニー＋トレーラー）を入れる</span>
+        </label>
+      </div>
+
       <textarea class="prompt-textarea" id="prompt-art" rows="10" readonly></textarea>
     </div>
     <p class="note-small">生成した文章を画像生成AI（例：Gemini、ChatGPT、Midjourneyなど）に貼り付けてご利用ください。</p>
@@ -187,6 +207,23 @@ const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
 
 const save = () => { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(items));}catch(e){} };
 const load = () => { try{ const r=localStorage.getItem(STORAGE_KEY); if(r){const p=JSON.parse(r);if(Array.isArray(p))items=p;} }catch(e){} };
+
+const LOGO_KEY = 'veggie-stand-logo-choice-v1';
+const saveLogoChoice = (v) => { try{localStorage.setItem(LOGO_KEY,v);}catch(e){} };
+const loadLogoChoice = () => {
+  try{
+    const v = localStorage.getItem(LOGO_KEY);
+    if(v){
+      const el = document.querySelector('input[name="logo-choice"][value="'+v+'"]');
+      if(el) el.checked = true;
+    }
+  }catch(e){}
+};
+const onLogoChoiceChange = () => {
+  const v = (document.querySelector('input[name="logo-choice"]:checked') || {}).value || 'none';
+  saveLogoChoice(v);
+  document.getElementById('prompt-art').value = buildArtMenuPrompt();
+};
 
 const buildSignboardPrompt = () => {
   if(!items.length)return '';
@@ -231,7 +268,16 @@ const buildArtMenuPrompt = () => {
     const f=it.featured?'　★本日の目玉★':'';
     return '・'+it.name+o+'：'+priceLabel(it.sell,it.unit)+n+f;
   }).join('\n');
-  return 'おしゃれな手書き風のイラストメニュー表を、A3サイズ・縦向き（ポートレート）の1枚にまとめて作ってください。\n\nレイアウトは、グリッドやマス目で均等に区切る構成ではなく、デザイナーが手描きで仕上げたような自由で動きのある配置にしてください。野菜のイラストや文字の大きさ・向き・余白を意図的に変化させ、視線が自然に流れるような、おしゃれで雑誌の特集ページのような仕上がりを目指してください。\n\n紙の素材はクラフト紙、麻紙、または優しい色合いの水彩風の背景など、温かみがありつつ洗練された雰囲気のものにしてください。文字は手書き風のカリグラフィーやレタリングを使い、野菜ごとに大きさを変えても構いません。\n\n掲載する野菜と価格は以下の通りです（すべてこの1枚にまとめて記載してください。野菜の数が多くても、文字やイラストのサイズを調整して必ず全て収めてください）：\n'+lines+'\n\n各野菜には、繊細で味のある手描きイラストを添えてください。産地が指定されている野菜は「〇〇産」と小さく添え、アピールポイントのひとことがある野菜は、洗練された手書きの一言コピーとして添えてください。\n「★本日の目玉★」と指定された野菜は、他より少し大きく描いたり、囲み線やリボン、控えめな装飾を加えることで自然に目を引くようにしてください（派手すぎないよう、全体のおしゃれな雰囲気を保ってください）。\n\n全体として、道端の八百屋というよりは、センスの良いファーマーズマーケットやおしゃれなカフェに飾ってあるようなメニューボードの雰囲気を目指してください。';
+
+  const logoChoice = (document.querySelector('input[name="logo-choice"]:checked') || {}).value || 'none';
+  let logoNote = '';
+  if (logoChoice === 'logo1') {
+    logoNote = '\n紙面の余白部分（上部または下部の隅）に、屋号の手描き風ロゴも入れてください。ロゴのイメージ：丸い緑と青の線で囲まれた中に、野菜を満載した赤い軽トラックのイラストと、「やさいのあるしあわせを、みなさまへ。育てる人の想いをのせて。」という手書き文字が入ったデザインです。このロゴと同じ世界観・タッチで、メニュー表全体のデザインを統一してください。\n';
+  } else if (logoChoice === 'logo2') {
+    logoNote = '\n紙面の余白部分（上部または下部の隅）に、屋号の手描き風ロゴも入れてください。ロゴのイメージ：丸い緑と青の線で囲まれた中に、野菜を満載したトレーラーを引く黄緑色のジムニーのイラストと、「やさいのあるしあわせを、みなさまへ。」という手書き文字が入ったデザインです。このロゴと同じ世界観・タッチで、メニュー表全体のデザインを統一してください。\n';
+  }
+
+  return 'おしゃれな手書き風のイラストメニュー表を、A3サイズ・縦向き（ポートレート）の1枚にまとめて作ってください。\n\nレイアウトは、グリッドやマス目で均等に区切る構成ではなく、デザイナーが手描きで仕上げたような自由で動きのある配置にしてください。野菜のイラストや文字の大きさ・向き・余白を意図的に変化させ、視線が自然に流れるような、おしゃれで雑誌の特集ページのような仕上がりを目指してください。\n\n紙の素材はクラフト紙、麻紙、または優しい色合いの水彩風の背景など、温かみがありつつ洗練された雰囲気のものにしてください。文字は手書き風のカリグラフィーやレタリングを使い、野菜ごとに大きさを変えても構いません。\n'+logoNote+'\n【重要】以下の野菜は1品も省略せず、全て同じ1枚の紙面に収めてください。品数が多い場合は、自由なレイアウトを保ったまま、文字やイラストを小さくしたり余白を詰めたりして調整し、誰か一つでも掲載漏れにならないようにしてください。掲載する野菜と価格は以下の通りです（全'+items.length+'品）：\n'+lines+'\n\n上記の'+items.length+'品すべてが紙面に描かれているか、出力前に必ず確認してください。\n\n各野菜には、繊細で味のある手描きイラストを添えてください。産地が指定されている野菜は「〇〇産」と小さく添え、アピールポイントのひとことがある野菜は、洗練された手書きの一言コピーとして添えてください。\n「★本日の目玉★」と指定された野菜は、他より少し大きく描いたり、囲み線やリボン、控えめな装飾を加えることで自然に目を引くようにしてください（派手すぎないよう、全体のおしゃれな雰囲気を保ってください）。\n\n全体として、道端の八百屋というよりは、センスの良いファーマーズマーケットやおしゃれなカフェに飾ってあるようなメニューボードの雰囲気を目指してください。';
 };
 
 const renderItems = () => {
@@ -348,7 +394,7 @@ document.getElementById('inp-cost').addEventListener('input',function(){const v=
 document.getElementById('inp-name').addEventListener('keydown',e=>{if(e.key==='Enter')addItem();});
 document.getElementById('btn-add').addEventListener('click',addItem);
 
-load(); renderItems();
+load(); loadLogoChoice(); renderItems();
 </script>
 
 <script>
