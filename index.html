@@ -49,6 +49,14 @@ input[type="text"], input[type="number"] {
 }
 input:focus { border-color:var(--green); }
 .sell-preview { width:100%; border:2px solid var(--line); border-radius:12px; padding:8px 11px; font-size:.9rem; font-weight:700; background:var(--bg); color:var(--text); }
+.mode-toggle { display:flex; gap:8px; }
+.mode-btn {
+  flex:1; border:2px solid var(--line); border-radius:12px; background:#fff;
+  font-family:var(--font-main); font-size:.82rem; font-weight:700; color:var(--text);
+  padding:8px 4px; cursor:pointer; transition:all .15s;
+}
+.mode-btn.active { background:var(--green); border-color:var(--green); color:#fff; }
+.unit-cost-preview { margin-top:8px; font-size:.78rem; opacity:.7; padding:2px 2px; }
 .btn-add {
   width:100%; display:flex; align-items:center; justify-content:center; gap:6px;
   background:var(--accent); color:#fff; font-family:var(--font-main); font-size:.95rem;
@@ -103,7 +111,7 @@ svg { display:inline-block; vertical-align:middle; }
     <span class="header-icon">&#127807;</span>
     <span class="header-title">やさい屋さんメニューづくり</span>
   </div>
-  <p class="header-desc">仕入れ値を入れると2割増しの売値を自動計算。<br>看板&amp;値札用の画像生成プロンプトもまとめて作れます。</p>
+  <p class="header-desc">仕入れの総額と個数（or重量）から単価を計算し、2割増しの売値を自動表示。<br>看板&amp;値札用の画像生成プロンプトもまとめて作れます。</p>
 </header>
 
 <main>
@@ -113,16 +121,36 @@ svg { display:inline-block; vertical-align:middle; }
       <label class="field-label">野菜名</label>
       <input type="text" id="inp-name" placeholder="例：トマト" autocomplete="off">
     </div>
+
+    <div class="mode-toggle form-gap">
+      <button type="button" class="mode-btn active" id="mode-btn-count" onclick="setAddMode('count')">個数で仕入れ</button>
+      <button type="button" class="mode-btn" id="mode-btn-weight" onclick="setAddMode('weight')">重量で仕入れ</button>
+    </div>
+
     <div class="field-row form-gap">
       <div class="field">
-        <label class="field-label">仕入れ値（円）</label>
-        <input type="number" id="inp-cost" placeholder="例：100" min="0" inputmode="numeric">
+        <label class="field-label">仕入れ総額（円）</label>
+        <input type="number" id="inp-cost-total" placeholder="例：500" min="0" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label class="field-label" id="label-cost-qty">仕入れ個数</label>
+        <input type="number" id="inp-cost-qty" placeholder="例：6" min="0" inputmode="numeric">
+      </div>
+    </div>
+
+    <div class="unit-cost-preview" id="preview-unit-cost">単価：—</div>
+
+    <div class="field-row form-gap">
+      <div class="field">
+        <label class="field-label" id="label-sell-qty">販売単位（個数）</label>
+        <input type="number" id="inp-sell-qty" placeholder="例：3" min="0" inputmode="numeric" value="1">
       </div>
       <div class="field">
         <label class="field-label">売値（2割増し）</label>
         <div class="sell-preview" id="preview-sell">—</div>
       </div>
     </div>
+
     <button class="btn-add" id="btn-add" disabled>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       追加する
@@ -193,20 +221,59 @@ const CARDS_PER_SHEET = 10;
 const MENU_ITEMS_PER_SHEET = 4;
 let items = [];
 
+// ── 単価計算 ──
+// 仕入れ：まとめて costTotal 円で costQty 個（or g）
+// 単価 = costTotal / costQty
+// 販売価格 = 単価 × sellQty × 1.2（10円単位で切り上げ）
+const calcUnitCost = (costTotal, costQty) => {
+  const t = Number(costTotal), q = Number(costQty);
+  if (!t || t <= 0 || !q || q <= 0) return 0;
+  return t / q;
+};
+const calcSellFromUnit = (unitCost, sellQty) => {
+  const u = Number(unitCost), q = Number(sellQty);
+  if (!u || u <= 0 || !q || q <= 0) return 0;
+  return Math.ceil((u * q * 1.2) / 10) * 10;
+};
+// 旧データ互換：単純な仕入れ値だけのケース（costのみ）
 const calcSellPrice = c => { const n=Number(c); if(!n||n<=0)return 0; return Math.ceil(n*1.2/10)*10; };
+
+const unitLabelText = (mode) => mode === 'weight' ? 'g' : '個';
 const formatYen = n => Number(n||0).toLocaleString('ja-JP')+'円';
-const priceLabel = (sell,unit) => { const y=formatYen(sell); return unit&&unit.trim()?unit.trim()+' '+y:y; };
-const formatItemLine = it => {
-  const o=it.origin&&it.origin.trim()?'（'+it.origin.trim()+'産）':'';
-  const n=it.note&&it.note.trim()?'（'+it.note.trim()+'）':'';
-  return '・'+it.name+o+'：'+priceLabel(it.sell,it.unit)+n;
+const sellUnitLabel = it => {
+  const q = it.sellQty;
+  if (!q || Number(q) <= 0) return '';
+  return Number(q) + unitLabelText(it.costMode);
+};
+const priceLabel = it => {
+  const y = formatYen(it.sell);
+  const label = sellUnitLabel(it);
+  return label ? label + ' ' + y : y;
 };
 const chunk = (arr,size) => { const o=[]; for(let i=0;i<arr.length;i+=size)o.push(arr.slice(i,i+size)); return o; };
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
 const save = () => { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(items));}catch(e){} };
-const load = () => { try{ const r=localStorage.getItem(STORAGE_KEY); if(r){const p=JSON.parse(r);if(Array.isArray(p))items=p;} }catch(e){} };
+const load = () => {
+  try{
+    const r=localStorage.getItem(STORAGE_KEY);
+    if(r){
+      const p=JSON.parse(r);
+      if(Array.isArray(p)){
+        // 旧データ互換：costMode等が無い場合は個数型・1個あたりとして補完
+        items = p.map(it => ({
+          ...it,
+          costMode: it.costMode || 'count',
+          costTotal: it.costTotal != null ? it.costTotal : (it.cost != null ? it.cost : ''),
+          costQty: it.costQty != null ? it.costQty : 1,
+          sellQty: it.sellQty != null ? it.sellQty : 1
+        }));
+      }
+    }
+  }catch(e){}
+};
+
 
 const LOGO_KEY = 'veggie-stand-logo-choice-v1';
 const saveLogoChoice = (v) => { try{localStorage.setItem(LOGO_KEY,v);}catch(e){} };
@@ -234,14 +301,14 @@ const buildSignboardPrompt = () => {
       const o=it.origin&&it.origin.trim()?'（'+it.origin.trim()+'産）':'';
       const n=it.note&&it.note.trim()?'（'+it.note.trim()+'）':'';
       const f=it.featured?'　★本日の目玉★':'';
-      return '・'+it.name+o+'：'+priceLabel(it.sell,it.unit)+n+f;
+      return '・'+it.name+o+'：'+priceLabel(it)+n+f;
     }).join('\n');
     return '【'+(idx+1)+'枚目／A4横向き：2×2の4マスメニュー表】\n'+layoutRule+'\n\n掲載する野菜（'+sheetItems.length+'品、残りのマスは空白）：\n'+lines;
   }).join('\n\n');
   const multiNote = sheets.length>1
     ? '\n野菜の数が多いため、合計'+sheets.length+'枚のシートに分かれます。今回はまず1枚目だけ作成してください。\n2枚目以降が欲しいときは、私から「次のメニュー表をお願いします。1枚目と同じ2×2の4マスレイアウトで、画面全体を使わず、各野菜を1マスずつに収めてください」と伝えますので、その指示に従って次の野菜で同じレイアウトの1枚を作成してください。\n'
     : '';
-  return '手描き風でポップな、八百屋の路上販売スタンドに飾るメニュー看板のイラストを作ってください。\n\n木製の黒板またはクラフト紙風の板をベースに、カラフルなチョークやマーカーで野菜の名前と価格を手書き風の文字で大きく書いてください。\n'+multiNote+'\n'+secs+'\n\n各野菜には、シンプルで可愛い手描き風のイラストを添えてください。\n産地が指定されている野菜は、「〇〇産」のように小さめの手書き文字で添えてください。\nアピールポイントのひとことが書かれている野菜は、その言葉を短いキャッチコピーとして手書き風の文字で添えてください。\n「★本日の目玉★」と指定された野菜は、星マークや「本日のおすすめ!」のような手描きの吹き出し・太めの枠線で他の野菜より少し目立つように装飾してください（マスの大きさは変えず、装飾だけで目立たせてください）。\n全体的に温かみがあり、道端の八百屋・産直スタンドらしい親しみやすいポップな雰囲気でデザインしてください。\n文字は離れた場所からでも読みやすい太さ・大きさにしてください。';
+  return '手描き風でポップな、八百屋の路上販売スタンドに飾るメニュー看板のイラストを作ってください。\n\n木製の黒板またはクラフト紙風の板をベースに、カラフルなチョークやマーカーで野菜の名前と価格を手書き風の文字で大きく書いてください。\n'+multiNote+'\n'+secs+'\n\n各野菜には、シンプルで可愛い手描き風のイラストを添えてください。\n産地が指定されている野菜は、「〇〇産」のように小さめの手書き文字で添えてください。\nアピールポイントのひとことが書かれている野菜は、その言葉を短いキャッチコピーとして手書き風の文字で添えてください。\n「★本日の目玉★」と指定された野菜は、星マークや「本日のおすすめ!」のような手描きの吹き出し・太めの枠線で他の野菜より少し目立つように装飾してください（マスの大きさは変えず、装飾だけで目立たせてください）。\n全体的に温かみがあり、道端の八百屋・産直スタンドらしい親しみやすいポップな雰囲気でデザインしてください。\n文字は離れた場所からでも読みやすい太さ・大きさにしてください。\nリストに記載のある野菜名・価格・産地・ひとこと以外の文章（キャッチコピーや挨拶文など）は新たに作成しないでください。';
 };
 
 const buildPriceTagPrompt = () => {
@@ -252,32 +319,37 @@ const buildPriceTagPrompt = () => {
       const o=it.origin&&it.origin.trim()?'　産地:'+it.origin.trim():'';
       const n=it.note&&it.note.trim()?'　ひとこと:「'+it.note.trim()+'」':'';
       const f=it.featured?'　★本日の目玉★':'';
-      return '・'+it.name+'：'+priceLabel(it.sell,it.unit)+o+n+f;
+      return '・'+it.name+'：'+priceLabel(it)+o+n+f;
     }).join('\n');
     return '【'+(idx+1)+'枚目のA4シート】\n'+lines;
   }).join('\n\n');
   const note=sheets.length>1?'\n野菜の種類が多いため、A4シートを'+sheets.length+'枚に分けて、それぞれ別の画像として作成してください。各シートに割り当てる野菜は以下の通りです。\n':'\n';
-  return '手描き風・ポップなデザインの「野菜の値札シート」を、A4サイズ（縦向き）の用紙レイアウトで作成してください。\n\n値札カードは1枚あたり横90mm×縦55mm程度（名刺サイズくらい）を想定し、A4用紙1枚につき2列×5行＝合計10枚のカードを並べてください。\n各カードの周囲には切り取り線（点線）を入れ、ハサミで1枚ずつ切り分けて商品の前に立てて飾れるようにしてください。\n各カードには、野菜の名前・価格・（あれば）産地・アピールポイントのひとことを大きく手書き風フォントで記載し、該当する野菜のシンプルで可愛い手描き風イラストも添えてください。\n産地は「〇〇産」のように、価格よりも小さめの文字で記載してください。\n'+note+'\n'+secs+'\n\n「本日の目玉」と指定したカードは、星マーク・色付きの太い枠線・「本日のおすすめ!」のような手描きのリボンや吹き出しなど、他のカードよりも目立つ特別な装飾を加えてください。\n配色はカラフルで親しみやすいポップな雰囲気に統一してください。';
+  return '手描き風・ポップなデザインの「野菜の値札シート」を、A4サイズ（縦向き）の用紙レイアウトで作成してください。\n\n値札カードは1枚あたり横90mm×縦55mm程度（名刺サイズくらい）を想定し、A4用紙1枚につき2列×5行＝合計10枚のカードを並べてください。\n各カードの周囲には切り取り線（点線）を入れ、ハサミで1枚ずつ切り分けて商品の前に立てて飾れるようにしてください。\n各カードには、野菜の名前・価格・（あれば）産地・アピールポイントのひとことを大きく手書き風フォントで記載し、該当する野菜のシンプルで可愛い手描き風イラストも添えてください。\n産地は「〇〇産」のように、価格よりも小さめの文字で記載してください。\n'+note+'\n'+secs+'\n\n「本日の目玉」と指定したカードは、星マーク・色付きの太い枠線・「本日のおすすめ!」のような手描きのリボンや吹き出しなど、他のカードよりも目立つ特別な装飾を加えてください。\n配色はカラフルで親しみやすいポップな雰囲気に統一してください。\nリストに記載のある野菜名・価格・産地・ひとこと以外の文章は新たに作成しないでください。';
 };
 
 const buildArtMenuPrompt = () => {
   if(!items.length)return '';
   const lines=items.map(it=>{
-    const o=it.origin&&it.origin.trim()?'（'+it.origin.trim()+'産）':'';
-    const n=it.note&&it.note.trim()?'（'+it.note.trim()+'）':'';
-    const f=it.featured?'　★本日の目玉★':'';
-    return '・'+it.name+o+'：'+priceLabel(it.sell,it.unit)+n+f;
+    const o=it.origin&&it.origin.trim()?'　産地：'+it.origin.trim():'';
+    const n=it.note&&it.note.trim()?'　ひとこと：'+it.note.trim():'';
+    const f=it.featured?'　【本日の目玉】':'';
+    return '・'+it.name+'　価格：'+priceLabel(it)+o+n+f;
   }).join('\n');
 
   const logoChoice = (document.querySelector('input[name="logo-choice"]:checked') || {}).value || 'none';
   let logoNote = '';
+  let logoTextLine = '';
   if (logoChoice === 'logo1') {
-    logoNote = '\n紙面の余白部分（上部または下部の隅）に、屋号の手描き風ロゴも入れてください。ロゴのイメージ：丸い緑と青の線で囲まれた中に、野菜を満載した赤い軽トラックのイラストと、「やさいのあるしあわせを、みなさまへ。育てる人の想いをのせて。」という手書き文字が入ったデザインです。このロゴと同じ世界観・タッチで、メニュー表全体のデザインを統一してください。\n';
+    logoNote = '\n紙面の余白部分（上部または下部の隅）に、屋号の手描き風ロゴも入れてください。ロゴのイメージ：丸い緑と青の線で囲まれた中に、野菜を満載した赤い軽トラックのイラストが入ったデザインです。このロゴと同じ世界観・タッチで、メニュー表全体のデザインを統一してください。\n';
+    logoTextLine = '・ロゴ内の文字：「やさいのあるしあわせを、みなさまへ。」「育てる人の想いをのせて。」\n';
   } else if (logoChoice === 'logo2') {
-    logoNote = '\n紙面の余白部分（上部または下部の隅）に、屋号の手描き風ロゴも入れてください。ロゴのイメージ：丸い緑と青の線で囲まれた中に、野菜を満載したトレーラーを引く黄緑色のジムニーのイラストと、「やさいのあるしあわせを、みなさまへ。」という手書き文字が入ったデザインです。このロゴと同じ世界観・タッチで、メニュー表全体のデザインを統一してください。\n';
+    logoNote = '\n紙面の余白部分（上部または下部の隅）に、屋号の手描き風ロゴも入れてください。ロゴのイメージ：丸い緑と青の線で囲まれた中に、野菜を満載したトレーラーを引く黄緑色のジムニーのイラストが入ったデザインです。このロゴと同じ世界観・タッチで、メニュー表全体のデザインを統一してください。\n';
+    logoTextLine = '・ロゴ内の文字：「やさいのあるしあわせを、みなさまへ。」\n';
   }
 
-  return 'おしゃれな手書き風のイラストメニュー表を、A3サイズ・縦向き（ポートレート）の1枚にまとめて作ってください。\n\nレイアウトは、グリッドやマス目で均等に区切る構成ではなく、デザイナーが手描きで仕上げたような自由で動きのある配置にしてください。野菜のイラストや文字の大きさ・向き・余白を意図的に変化させ、視線が自然に流れるような、おしゃれで雑誌の特集ページのような仕上がりを目指してください。\n\n紙の素材はクラフト紙、麻紙、または優しい色合いの水彩風の背景など、温かみがありつつ洗練された雰囲気のものにしてください。文字は手書き風のカリグラフィーやレタリングを使い、野菜ごとに大きさを変えても構いません。\n'+logoNote+'\n【重要】以下の野菜は1品も省略せず、全て同じ1枚の紙面に収めてください。品数が多い場合は、自由なレイアウトを保ったまま、文字やイラストを小さくしたり余白を詰めたりして調整し、誰か一つでも掲載漏れにならないようにしてください。掲載する野菜と価格は以下の通りです（全'+items.length+'品）：\n'+lines+'\n\n上記の'+items.length+'品すべてが紙面に描かれているか、出力前に必ず確認してください。\n\n各野菜には、繊細で味のある手描きイラストを添えてください。産地が指定されている野菜は「〇〇産」と小さく添え、アピールポイントのひとことがある野菜は、洗練された手書きの一言コピーとして添えてください。\n「★本日の目玉★」と指定された野菜は、他より少し大きく描いたり、囲み線やリボン、控えめな装飾を加えることで自然に目を引くようにしてください（派手すぎないよう、全体のおしゃれな雰囲気を保ってください）。\n\n全体として、道端の八百屋というよりは、センスの良いファーマーズマーケットやおしゃれなカフェに飾ってあるようなメニューボードの雰囲気を目指してください。';
+  const dataBlock = '掲載する野菜リスト（全'+items.length+'品。各行の「産地」「ひとこと」「【本日の目玉】」は記載がある行にのみ存在します）：\n'+lines+'\n'+(logoTextLine?'\n'+logoTextLine:'');
+
+  return 'おしゃれな手書き風のイラストメニュー表を、A3サイズ・縦向き（ポートレート）の1枚にまとめて作ってください。\n\nレイアウトは、グリッドやマス目で均等に区切る構成ではなく、デザイナーが手描きで仕上げたような自由で動きのある配置にしてください。野菜のイラストや文字の大きさ・向き・余白を意図的に変化させ、視線が自然に流れるような仕上がりにしてください。\n\n紙の素材はクラフト紙、麻紙、または優しい色合いの水彩風の背景など、温かみがありつつ洗練された雰囲気のものにしてください。文字は手書き風のカリグラフィーやレタリングにしてください。\n'+logoNote+'\n【最重要・文字に関する厳格なルール】\nこの画像に書き込む文字情報は、下記の「掲載する野菜リスト」に書かれている文字（野菜名・価格・産地・ひとこと・本日の目玉の表示、およびロゴ内の文字）以外、一切使用しないでください。\n見出しコピー、煽り文句、店の挨拶文、キャッチフレーズ、英語表記、日付、天気、季節の言葉など、リストに存在しない文章やフレーズを新たに作って書き込むことは禁止します。\n「産地」が書かれていない野菜には産地表記を描かないでください。「ひとこと」が書かれていない野菜にはコピーや説明文を描かないでください。\n\n'+dataBlock+'\n\n【重要】上記の野菜は1品も省略せず、全て同じ1枚の紙面に収めてください。品数が多い場合は、自由なレイアウトを保ったまま文字やイラストを小さくして調整し、掲載漏れがないようにしてください。出力前に、全'+items.length+'品が描かれているか、リストにない文字が紙面に存在しないかを必ず確認してください。\n\n各野菜には、繊細で味のある手描きイラストを添えてください。\n「【本日の目玉】」と指定された野菜は、他より少し大きく描いたり、囲み線やリボン、控えめな装飾を加えることで自然に目を引くようにしてください（新しい文言は追加せず、装飾のみで目立たせてください）。\n\n全体として、道端の八百屋というよりは、センスの良いファーマーズマーケットやおしゃれなカフェに飾ってあるようなメニューボードの雰囲気を目指してください。';
 };
 
 const renderItems = () => {
@@ -287,7 +359,12 @@ const renderItems = () => {
     document.getElementById('prompt-section').style.display='none';
     return;
   }
-  list.innerHTML=items.map(it=>`
+  list.innerHTML=items.map(it=>{
+    const unitCost = calcUnitCost(it.costTotal, it.costQty);
+    const unitCostText = unitCost ? '単価：1'+unitLabelText(it.costMode)+'あたり '+(Math.round(unitCost*100)/100)+'円' : '単価：—';
+    const qtyLabel = it.costMode==='weight' ? '仕入れ重量（g）' : '仕入れ個数';
+    const sellQtyLabel = it.costMode==='weight' ? '販売単位（g）' : '販売単位（個数）';
+    return `
     <div class="item-card ${it.featured?'featured':''}" id="item-${it.id}">
       ${it.featured?'<div class="featured-badge">&#9733;本日の目玉</div>':''}
       <div class="item-name-row" ${it.featured?'style="margin-top:8px"':''}>
@@ -297,18 +374,38 @@ const renderItems = () => {
           title="本日の目玉に設定" onclick="toggleFeatured('${it.id}')">&#11088;</button>
         <button class="btn-icon" title="削除" onclick="removeItem('${it.id}')">&#128465;&#65039;</button>
       </div>
+
+      <div class="mode-toggle" style="margin-bottom:8px;">
+        <button type="button" class="mode-btn ${it.costMode!=='weight'?'active':''}" onclick="updateField('${it.id}','costMode','count')">個数で仕入れ</button>
+        <button type="button" class="mode-btn ${it.costMode==='weight'?'active':''}" onclick="updateField('${it.id}','costMode','weight')">重量で仕入れ</button>
+      </div>
+
       <div class="price-row">
         <div class="field">
-          <label class="field-label">仕入れ値</label>
+          <label class="field-label">仕入れ総額（円）</label>
           <div class="price-input-wrap">
-            <input type="number" min="0" inputmode="numeric" value="${esc(it.cost)}"
-              onchange="updateField('${it.id}','cost',this.value===''?'':Number(this.value))">
+            <input type="number" min="0" inputmode="numeric" value="${esc(it.costTotal)}"
+              onchange="updateField('${it.id}','costTotal',this.value===''?'':Number(this.value))">
             <span class="yen">円</span>
           </div>
         </div>
-        <button class="btn-icon btn-recalc" title="2割増しで再計算" onclick="recalc('${it.id}')">&#128260;</button>
         <div class="field">
-          <label class="field-label sell-label" id="slabel-${it.id}">売値（修正可）${it.unit&&it.unit.trim()?'／'+esc(it.unit.trim())+'あたり':''}</label>
+          <label class="field-label">${qtyLabel}</label>
+          <input type="number" min="0" inputmode="numeric" value="${esc(it.costQty)}"
+            onchange="updateField('${it.id}','costQty',this.value===''?'':Number(this.value))">
+        </div>
+      </div>
+      <div class="unit-cost-preview" id="unitcost-${it.id}">${unitCostText}</div>
+
+      <div class="price-row" style="margin-top:8px;">
+        <div class="field">
+          <label class="field-label">${sellQtyLabel}</label>
+          <input type="number" min="0" inputmode="numeric" value="${esc(it.sellQty)}"
+            onchange="updateField('${it.id}','sellQty',this.value===''?'':Number(this.value))">
+        </div>
+        <button class="btn-icon btn-recalc" title="単価から再計算" onclick="recalc('${it.id}')">&#128260;</button>
+        <div class="field">
+          <label class="field-label sell-label">売値（修正可）</label>
           <div class="price-input-wrap">
             <input type="number" min="0" inputmode="numeric" value="${esc(it.sell)}"
               class="sell-input"
@@ -317,6 +414,7 @@ const renderItems = () => {
           </div>
         </div>
       </div>
+
       <div class="two-col">
         <div class="field">
           <label class="field-label">産地</label>
@@ -324,49 +422,91 @@ const renderItems = () => {
             onchange="updateField('${it.id}','origin',this.value)">
         </div>
         <div class="field">
-          <label class="field-label">数量・単位</label>
-          <input type="text" value="${esc(it.unit||'')}" placeholder="例：3個、100g"
-            onchange="updateField('${it.id}','unit',this.value)"
-            oninput="refreshUnitLabel('${it.id}',this.value)">
+          <label class="field-label">ひとこと（アピールポイント）</label>
+          <input type="text" value="${esc(it.note||'')}" placeholder="例：甘くてジューシー！"
+            onchange="updateField('${it.id}','note',this.value)">
         </div>
       </div>
-      <div>
-        <label class="field-label">ひとこと（アピールポイント）</label>
-        <input type="text" value="${esc(it.note||'')}" placeholder="例：甘くてジューシー！朝採れたて"
-          onchange="updateField('${it.id}','note',this.value)">
-      </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
   document.getElementById('prompt-sign').value=buildSignboardPrompt();
   document.getElementById('prompt-tags').value=buildPriceTagPrompt();
   document.getElementById('prompt-art').value=buildArtMenuPrompt();
   document.getElementById('prompt-section').style.display='flex';
 };
 
+let addMode = 'count'; // 'count' | 'weight'
+
+const setAddMode = (mode) => {
+  addMode = mode;
+  document.getElementById('mode-btn-count').classList.toggle('active', mode==='count');
+  document.getElementById('mode-btn-weight').classList.toggle('active', mode==='weight');
+  document.getElementById('label-cost-qty').textContent = mode==='weight' ? '仕入れ重量（g）' : '仕入れ個数';
+  document.getElementById('inp-cost-qty').placeholder = mode==='weight' ? '例：3000' : '例：6';
+  document.getElementById('label-sell-qty').textContent = mode==='weight' ? '販売単位（g）' : '販売単位（個数）';
+  document.getElementById('inp-sell-qty').placeholder = mode==='weight' ? '例：100' : '例：3';
+  updateAddPreview();
+};
+
+const updateAddPreview = () => {
+  const total = Number(document.getElementById('inp-cost-total').value) || 0;
+  const qty   = Number(document.getElementById('inp-cost-qty').value) || 0;
+  const sellQty = Number(document.getElementById('inp-sell-qty').value) || 0;
+  const unitCost = calcUnitCost(total, qty);
+  const unitLabel = unitLabelText(addMode);
+
+  const ucEl = document.getElementById('preview-unit-cost');
+  ucEl.textContent = unitCost ? '単価：1' + unitLabel + 'あたり ' + (Math.round(unitCost*100)/100) + '円' : '単価：—';
+
+  const sell = calcSellFromUnit(unitCost, sellQty);
+  document.getElementById('preview-sell').textContent = sell ? formatYen(sell) : '—';
+};
+
 const addItem = () => {
-  const ne=document.getElementById('inp-name'), ce=document.getElementById('inp-cost');
-  const name=ne.value.trim(); if(!name)return;
-  const cost=Number(ce.value)||0;
-  items.push({id:uid(),name,cost,sell:calcSellPrice(cost),featured:false,note:'',origin:'',unit:''});
-  ne.value=''; ce.value='';
-  document.getElementById('preview-sell').textContent='—';
-  document.getElementById('btn-add').disabled=true;
+  const ne = document.getElementById('inp-name');
+  const name = ne.value.trim(); if(!name) return;
+
+  const costTotal = Number(document.getElementById('inp-cost-total').value) || 0;
+  const costQty   = Number(document.getElementById('inp-cost-qty').value) || 0;
+  const sellQty   = Number(document.getElementById('inp-sell-qty').value) || 1;
+  const unitCost  = calcUnitCost(costTotal, costQty);
+  const sell      = calcSellFromUnit(unitCost, sellQty);
+
+  items.push({
+    id: uid(), name,
+    costMode: addMode,
+    costTotal, costQty, sellQty,
+    sell,
+    featured: false, note: '', origin: ''
+  });
+
+  ne.value = '';
+  document.getElementById('inp-cost-total').value = '';
+  document.getElementById('inp-cost-qty').value = '';
+  document.getElementById('inp-sell-qty').value = '1';
+  document.getElementById('preview-unit-cost').textContent = '単価：—';
+  document.getElementById('preview-sell').textContent = '—';
+  document.getElementById('btn-add').disabled = true;
   save(); renderItems();
 };
+const RERENDER_KEYS = ['costMode','costTotal','costQty','sellQty','featured'];
 const updateField = (id,key,val) => {
   const it=items.find(i=>i.id===id); if(!it)return;
   it[key]=val; save();
+  if (RERENDER_KEYS.includes(key)) {
+    renderItems();
+    return;
+  }
   document.getElementById('prompt-sign').value=buildSignboardPrompt();
   document.getElementById('prompt-tags').value=buildPriceTagPrompt();
   document.getElementById('prompt-art').value=buildArtMenuPrompt();
 };
-const refreshUnitLabel = (id,val) => {
-  const el=document.getElementById('slabel-'+id);
-  if(el)el.textContent='売値（修正可）'+(val.trim()?'／'+val.trim()+'あたり':'');
-};
 const recalc = id => {
   const it=items.find(i=>i.id===id); if(!it)return;
-  it.sell=calcSellPrice(it.cost); save(); renderItems();
+  const unitCost = calcUnitCost(it.costTotal, it.costQty);
+  it.sell = calcSellFromUnit(unitCost, it.sellQty);
+  save(); renderItems();
 };
 const toggleFeatured = id => {
   const it=items.find(i=>i.id===id); if(!it)return;
@@ -390,7 +530,9 @@ const copyPrompt = key => {
 };
 
 document.getElementById('inp-name').addEventListener('input',function(){document.getElementById('btn-add').disabled=!this.value.trim();});
-document.getElementById('inp-cost').addEventListener('input',function(){const v=calcSellPrice(this.value);document.getElementById('preview-sell').textContent=v?formatYen(v):'—';});
+document.getElementById('inp-cost-total').addEventListener('input',updateAddPreview);
+document.getElementById('inp-cost-qty').addEventListener('input',updateAddPreview);
+document.getElementById('inp-sell-qty').addEventListener('input',updateAddPreview);
 document.getElementById('inp-name').addEventListener('keydown',e=>{if(e.key==='Enter')addItem();});
 document.getElementById('btn-add').addEventListener('click',addItem);
 
